@@ -21,3 +21,7 @@ __pycache__/
 # Temporary files
 *.tmp
 *.swp
+
+# M1 additions
+build/repro/
+*.map
