@@ -66,7 +66,13 @@ void kmain(void) {
     cpu_sti();
 
     log_writeln("[M3] ready for QEMU smoke test and GDB audit");
+    uint64_t last_reported = 0;
     for (;;) {
         cpu_hlt();
+        uint64_t now = timer_ticks();
+        if (now - last_reported >= 100u) {
+            log_key_value_hex64("ticks", now);
+            last_reported = now;
+        }
     }
 }
