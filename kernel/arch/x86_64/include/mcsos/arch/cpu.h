@@ -10,6 +10,10 @@ static inline void cpu_hlt(void) {
     __asm__ volatile ("hlt" : : : "memory");
 }
 
+static inline void cpu_sti(void) {
+    __asm__ volatile ("sti" ::: "memory");
+}
+
 static inline void cpu_pause(void) {
     __asm__ volatile ("pause" : : : "memory");
 }

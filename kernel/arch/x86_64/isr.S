@@ -22,42 +22,41 @@ isr_stub_\vector:
 .global isr_common
 .type isr_common, @function
 isr_common:
-    pushq %rax
-    pushq %rbx
-    pushq %rcx
-    pushq %rdx
-    pushq %rbp
-    pushq %rdi
-    pushq %rsi
-    pushq %r8
-    pushq %r9
-    pushq %r10
-    pushq %r11
-    pushq %r12
-    pushq %r13
-    pushq %r14
     pushq %r15
+    pushq %r14
+    pushq %r13
+    pushq %r12
+    pushq %r11
+    pushq %r10
+    pushq %r9
+    pushq %r8
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %rdx
+    pushq %rcx
+    pushq %rbx
+    pushq %rax
     movq %rsp, %rdi
     call x86_64_trap_dispatch
-    popq %r15
-    popq %r14
-    popq %r13
-    popq %r12
-    popq %r11
-    popq %r10
-    popq %r9
-    popq %r8
-    popq %rsi
-    popq %rdi
-    popq %rbp
-    popq %rdx
-    popq %rcx
-    popq %rbx
     popq %rax
+    popq %rbx
+    popq %rcx
+    popq %rdx
+    popq %rbp
+    popq %rdi
+    popq %rsi
+    popq %r8
+    popq %r9
+    popq %r10
+    popq %r11
+    popq %r12
+    popq %r13
+    popq %r14
+    popq %r15
     addq $16, %rsp
     iretq
 .size isr_common, . - isr_common
-
 ISR_NOERR 0
 ISR_NOERR 1
 ISR_NOERR 2
@@ -90,6 +89,22 @@ ISR_NOERR 28
 ISR_ERR 29
 ISR_ERR 30
 ISR_NOERR 31
+ISR_NOERR 32
+ISR_NOERR 33
+ISR_NOERR 34
+ISR_NOERR 35
+ISR_NOERR 36
+ISR_NOERR 37
+ISR_NOERR 38
+ISR_NOERR 39
+ISR_NOERR 40
+ISR_NOERR 41
+ISR_NOERR 42
+ISR_NOERR 43
+ISR_NOERR 44
+ISR_NOERR 45
+ISR_NOERR 46
+ISR_NOERR 47
 
 .section .rodata
 .global x86_64_exception_stubs
@@ -128,4 +143,20 @@ x86_64_exception_stubs:
     .quad isr_stub_29
     .quad isr_stub_30
     .quad isr_stub_31
+    .quad isr_stub_32
+    .quad isr_stub_33
+    .quad isr_stub_34
+    .quad isr_stub_35
+    .quad isr_stub_36
+    .quad isr_stub_37
+    .quad isr_stub_38
+    .quad isr_stub_39
+    .quad isr_stub_40
+    .quad isr_stub_41
+    .quad isr_stub_42
+    .quad isr_stub_43
+    .quad isr_stub_44
+    .quad isr_stub_45
+    .quad isr_stub_46
+    .quad isr_stub_47
 .size x86_64_exception_stubs, . - x86_64_exception_stubs

@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <mcsos/arch/idt.h>
 #include <mcsos/arch/isr.h>
+#include <mcsos/arch/pic.h>
+#include <mcsos/arch/pit.h>
 #include <mcsos/kernel/log.h>
 #include <mcsos/kernel/panic.h>
 
@@ -34,7 +36,7 @@ void x86_64_idt_init(void) {
         x86_64_idt_set_gate((uint8_t)i, 0u, 0u);
     }
 
-    for (uint8_t vector = 0u; vector < 32u; ++vector) {
+    for (uint8_t vector = 0u; vector < 48u; ++vector) {
         uint8_t gate_type = X86_64_IDT_GATE_INTERRUPT;
         if (vector == 3u) {
             gate_type = X86_64_IDT_GATE_TRAP;
