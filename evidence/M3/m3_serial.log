@@ -1,0 +1,7 @@
+MCSOS 260502 M3 kernel entered
+kernel_start=0xffffffff80000000
+kernel_end=0xffffffff80002004
+rflags=0x0000000000000082
+[M3] selftest: basic invariants passed
+[M3] panic path installed; intentional panic disabled
+[M3] ready for QEMU smoke test and GDB audit
