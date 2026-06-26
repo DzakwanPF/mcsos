@@ -6,6 +6,8 @@ KERNEL       := $(BUILD_DIR)/kernel.elf
 PANIC_KERNEL := $(BUILD_DIR)/kernel.panic.elf
 MAP          := $(BUILD_DIR)/kernel.map
 PANIC_MAP    := $(BUILD_DIR)/kernel.panic.map
+BREAKPOINT_KERNEL := $(BUILD_DIR)/kernel.breakpoint.elf
+BREAKPOINT_MAP    := $(BUILD_DIR)/kernel.breakpoint.map
 DISASM       := $(BUILD_DIR)/kernel.disasm.txt
 SYMS         := $(BUILD_DIR)/kernel.syms.txt
 
@@ -23,28 +25,48 @@ COMMON_CFLAGS := --target=x86_64-unknown-none-elf -std=c17 -ffreestanding \
 
 CFLAGS       := $(COMMON_CFLAGS)
 PANIC_CFLAGS := $(COMMON_CFLAGS) -DMCSOS_M3_TRIGGER_PANIC=1
-
+BREAKPOINT_CFLAGS := $(COMMON_CFLAGS) -DMCSOS_M4_TRIGGER_BREAKPOINT=1
 LDFLAGS := -nostdlib -static -z max-page-size=0x1000 -T linker.ld
 
-SRC_C     := $(shell find kernel -name '*.c' | LC_ALL=C sort)
-OBJ       := $(patsubst %.c,$(BUILD_DIR)/normal/%.o,$(SRC_C))
-PANIC_OBJ := $(patsubst %.c,$(BUILD_DIR)/panic/%.o,$(SRC_C))
+SRC_C    := $(shell find kernel -name '*.c' | LC_ALL=C sort)
+SRC_S    := $(shell find kernel -name '*.S' | LC_ALL=C sort)
 
-.PHONY: all build panic inspect audit clean distclean
+OBJ      := $(patsubst %.c,$(BUILD_DIR)/normal/%.o,$(SRC_C)) $(patsubst %.S,$(BUILD_DIR)/normal/%.o,$(SRC_S))
+PANIC_OBJ := $(patsubst %.c,$(BUILD_DIR)/panic/%.o,$(SRC_C)) $(patsubst %.S,$(BUILD_DIR)/panic/%.o,$(SRC_S))
+BREAKPOINT_OBJ := $(patsubst %.c,$(BUILD_DIR)/breakpoint/%.o,$(SRC_C)) $(patsubst %.S,$(BUILD_DIR)/breakpoint/%.o,$(SRC_S))
+
+.PHONY: all build panic breakpoint inspect audit clean distclean
 
 all: build inspect
 
 build: $(KERNEL)
 
 panic: $(PANIC_KERNEL)
+breakpoint: $(BREAKPOINT_KERNEL)
 
 $(BUILD_DIR)/normal/%.o: %.c
+>mkdir -p $(dir $@)
+>$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/normal/%.o: %.S
 >mkdir -p $(dir $@)
 >$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/panic/%.o: %.c
 >mkdir -p $(dir $@)
 >$(CC) $(PANIC_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/panic/%.o: %.S
+>mkdir -p $(dir $@)
+>$(CC) $(PANIC_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/breakpoint/%.o: %.c
+>mkdir -p $(dir $@)
+>$(CC) $(BREAKPOINT_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/breakpoint/%.o: %.S
+>mkdir -p $(dir $@)
+>$(CC) $(BREAKPOINT_CFLAGS) -c $< -o $@
 
 $(KERNEL): $(OBJ) linker.ld
 >mkdir -p $(BUILD_DIR)
@@ -53,6 +75,10 @@ $(KERNEL): $(OBJ) linker.ld
 $(PANIC_KERNEL): $(PANIC_OBJ) linker.ld
 >mkdir -p $(BUILD_DIR)
 >$(LD) $(LDFLAGS) -Map=$(PANIC_MAP) -o $@ $(PANIC_OBJ)
+
+$(BREAKPOINT_KERNEL): $(BREAKPOINT_OBJ) linker.ld
+>mkdir -p $(BUILD_DIR)
+>$(LD) $(LDFLAGS) -Map=$(BREAKPOINT_MAP) -o $@ $(BREAKPOINT_OBJ)
 
 inspect: $(KERNEL)
 >$(READELF) -h $(KERNEL) > $(BUILD_DIR)/kernel.readelf.header.txt
@@ -90,17 +116,17 @@ image: build
 >mkdir -p $(ISO_ROOT)/boot/limine
 >mkdir -p $(ISO_ROOT)/EFI/BOOT
 >cp $(KERNEL) $(ISO_ROOT)/boot/kernel.elf
->cp $(LIMINE_DIR)/limine.sys    $(ISO_ROOT)/boot/limine/
->cp $(LIMINE_DIR)/limine-cd.bin $(ISO_ROOT)/boot/limine/
->cp $(LIMINE_DIR)/limine-cd-efi.bin $(ISO_ROOT)/boot/limine/
->cp $(LIMINE_DIR)/BOOTX64.EFI        $(ISO_ROOT)/EFI/BOOT/
->printf 'TIMEOUT=3\n\n:MCSOS M3\nPROTOCOL=limine\nKERNEL_PATH=boot:///boot/kernel.elf\n' \
->    > $(ISO_ROOT)/boot/limine/limine.cfg
+>cp $(LIMINE_DIR)/limine-bios.sys     $(ISO_ROOT)/boot/limine/
+>cp $(LIMINE_DIR)/limine-bios-cd.bin  $(ISO_ROOT)/boot/limine/
+>cp $(LIMINE_DIR)/limine-uefi-cd.bin  $(ISO_ROOT)/boot/limine/
+>cp $(LIMINE_DIR)/BOOTX64.EFI         $(ISO_ROOT)/EFI/BOOT/
+>printf 'timeout: 3\n\n/MCSOS M4\n    protocol: limine\n    path: boot():/boot/kernel.elf\n' \
+>    > $(ISO_ROOT)/boot/limine/limine.conf
 >xorriso -as mkisofs \
->    -b boot/limine/limine-cd.bin \
+>    -b boot/limine/limine-bios-cd.bin \
 >    -no-emul-boot -boot-load-size 4 -boot-info-table \
->    --efi-boot boot/limine/limine-cd-efi.bin \
->    -efi-boot-part --efi-boot-image \
+>    --efi-boot boot/limine/limine-uefi-cd.bin \
+>    --efi-boot-part --efi-boot-image \
 >    --protective-msdos-label \
 >    $(ISO_ROOT) -o $(ISO)
 >$(LIMINE_DIR)/limine bios-install $(ISO) 2>/dev/null || true
