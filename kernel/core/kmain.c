@@ -7,6 +7,7 @@
 #include <mcsos/kernel/log.h>
 #include <mcsos/kernel/panic.h>
 #include <mcsos/kernel/version.h>
+#include <mcsos/kernel/kmem.h>
 
 extern char __kernel_start[];
 extern char __kernel_end[];
@@ -21,6 +22,32 @@ static void m4_selftest(void) {
     KERNEL_ASSERT(x86_64_idt_limit_for_test() == (uint16_t)((256u * 16u) - 1u));
     KERNEL_ASSERT(x86_64_idt_base_for_test() != 0u);
     log_writeln("[M4] selftest: IDT installed with expected limit");
+}
+
+static unsigned char m8_boot_heap[64u * 1024u] __attribute__((aligned(4096)));
+
+static void m8_heap_bootstrap(void) {
+    int rc = kmem_init(m8_boot_heap, sizeof(m8_boot_heap));
+    if (rc != 0) {
+        KERNEL_PANIC("M8 kmem_init failed", (uint64_t)rc);
+    }
+
+    void *probe = kmem_alloc(128);
+    if (probe == (void *)0) {
+        KERNEL_PANIC("M8 kmem_alloc probe failed", 0u);
+    }
+
+    if (kmem_free_checked(probe) != 0) {
+        KERNEL_PANIC("M8 kmem_free_checked probe failed", 0u);
+    }
+
+    kmem_stats_t st;
+    kmem_get_stats(&st);
+    log_writeln("[M8] kmem heap initialized");
+    log_key_value_hex64("m8_heap_total", (uint64_t)st.total_bytes);
+    log_key_value_hex64("m8_heap_free", (uint64_t)st.free_bytes);
+    log_key_value_hex64("m8_heap_largest_free", (uint64_t)st.largest_free);
+    log_key_value_hex64("m8_heap_blocks", (uint64_t)st.block_count);
 }
 
 void kmain(void) {
@@ -38,6 +65,7 @@ void kmain(void) {
 
     x86_64_idt_init();
     m4_selftest();
+    m8_heap_bootstrap();
 
 #ifdef MCSOS_M3_TRIGGER_PANIC
     KERNEL_PANIC("intentional M3 panic test", 0x4D43534F533033u);

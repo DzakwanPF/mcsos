@@ -158,3 +158,43 @@ check: $(VMM_OBJ) $(BUILD_DIR)/test_vmm_host
 >@echo "[PASS] M7 check selesai"
 
 .PHONY: check
+
+# ============================================================
+# M8 - kernel heap allocator host unit test + freestanding audit
+# ============================================================
+HOSTCC        ?= cc
+HOST_CFLAGS_M8 := -std=c17 -Wall -Wextra -Werror -Ikernel/include
+KMEM_OBJ      := $(BUILD_DIR)/kmem_freestanding.o
+
+.PHONY: m8-clean m8-kmem-host-test m8-kmem-freestanding m8-audit m8-all
+
+m8-clean:
+>rm -rf $(BUILD_DIR)/m8 $(KMEM_OBJ) $(BUILD_DIR)/test_kmem_host $(BUILD_DIR)/test_kmem_host.log
+
+$(KMEM_OBJ): kernel/mm/kmem.c kernel/include/mcsos/kernel/kmem.h
+>mkdir -p $(BUILD_DIR)
+>$(CC) $(COMMON_CFLAGS) -c kernel/mm/kmem.c -o $@
+
+m8-kmem-freestanding: $(KMEM_OBJ)
+
+$(BUILD_DIR)/test_kmem_host: kernel/mm/kmem.c tests/test_kmem.c kernel/include/mcsos/kernel/kmem.h
+>mkdir -p $(BUILD_DIR)
+>$(HOSTCC) $(HOST_CFLAGS_M8) tests/test_kmem.c kernel/mm/kmem.c -o $@
+
+m8-kmem-host-test: $(BUILD_DIR)/test_kmem_host
+>$(BUILD_DIR)/test_kmem_host | tee $(BUILD_DIR)/test_kmem_host.log
+
+m8-audit: m8-kmem-freestanding
+>@echo "=== M8 nm audit ==="
+>$(NM) -u $(KMEM_OBJ) | tee $(BUILD_DIR)/kmem_nm_u.txt
+>test ! -s $(BUILD_DIR)/kmem_nm_u.txt
+>@echo "=== M8 readelf audit ==="
+>$(READELF) -h $(KMEM_OBJ) | tee $(BUILD_DIR)/kmem_readelf_h.txt
+>@echo "=== M8 objdump audit ==="
+>$(OBJDUMP) -dr $(KMEM_OBJ) > $(BUILD_DIR)/kmem.objdump.txt
+>grep -q 'kmem_init' $(BUILD_DIR)/kmem.objdump.txt && echo "[OK] kmem_init found"
+>grep -q 'kmem_alloc' $(BUILD_DIR)/kmem.objdump.txt && echo "[OK] kmem_alloc found"
+>grep -q 'kmem_validate' $(BUILD_DIR)/kmem.objdump.txt && echo "[OK] kmem_validate found"
+>@echo "[PASS] M8 audit selesai"
+
+m8-all: m8-kmem-host-test m8-audit
