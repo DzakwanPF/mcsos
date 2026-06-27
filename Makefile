@@ -131,3 +131,30 @@ image: build
 >    $(ISO_ROOT) -o $(ISO)
 >$(LIMINE_DIR)/limine bios-install $(ISO) 2>/dev/null || true
 >echo "ISO siap: $(ISO)"
+
+# ============================================================
+# M7 - VMM host unit test targets
+# ============================================================
+HOSTCC   ?= cc
+HOST_CFLAGS_M7 := -std=c17 -Wall -Wextra -Werror -DMCSOS_HOST_TEST -Ikernel/include
+VMM_OBJ  := $(BUILD_DIR)/vmm_freestanding.o
+
+$(VMM_OBJ): kernel/core/vmm.c kernel/include/mcsos/kernel/vmm.h
+>mkdir -p $(BUILD_DIR)
+>$(CC) $(COMMON_CFLAGS) -c kernel/core/vmm.c -o $@
+
+$(BUILD_DIR)/test_vmm_host: kernel/core/vmm.c tests/test_vmm_host.c kernel/include/mcsos/kernel/vmm.h
+>mkdir -p $(BUILD_DIR)
+>$(HOSTCC) $(HOST_CFLAGS_M7) kernel/core/vmm.c tests/test_vmm_host.c -o $@
+
+check: $(VMM_OBJ) $(BUILD_DIR)/test_vmm_host
+>$(BUILD_DIR)/test_vmm_host
+>@echo "=== nm audit ==="
+>nm -u $(VMM_OBJ)
+>@echo "=== objdump audit ==="
+>objdump -dr $(VMM_OBJ) > $(BUILD_DIR)/vmm.objdump.txt
+>grep -q "invlpg" $(BUILD_DIR)/vmm.objdump.txt && echo "[OK] invlpg found"
+>grep -q "cr3"    $(BUILD_DIR)/vmm.objdump.txt && echo "[OK] cr3 found"
+>@echo "[PASS] M7 check selesai"
+
+.PHONY: check
