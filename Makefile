@@ -198,3 +198,4 @@ m8-audit: m8-kmem-freestanding
 >@echo "[PASS] M8 audit selesai"
 
 m8-all: m8-kmem-host-test m8-audit
+

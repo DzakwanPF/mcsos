@@ -62,7 +62,7 @@ int mcsos_thread_prepare(mcsos_thread_t *thread, const char *name,
     thread->state = MCSOS_THREAD_NEW;
     zero_context(&thread->context);
     thread->context.rsp = (uint64_t)top;
-    thread->context.rip = (uint64_t)(uintptr_t)mcsos_thread_trampoline;
+    thread->context.rip = (uint64_t)(uintptr_t)entry;
     thread->entry = entry; thread->arg = arg;
     thread->stack_base = (uint8_t *)stack_base; thread->stack_size = stack_size;
     thread->next = (mcsos_thread_t *)0;
