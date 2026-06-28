@@ -8,9 +8,34 @@
 #include <mcsos/kernel/panic.h>
 #include <mcsos/kernel/version.h>
 #include <mcsos/kernel/kmem.h>
+#include "mcsos_thread.h"
 
 extern char __kernel_start[];
 extern char __kernel_end[];
+
+/* M9: scheduler globals */
+static mcsos_scheduler_t g_sched;
+static mcsos_thread_t    g_boot_thread;
+static mcsos_thread_t    g_thread_a;
+static mcsos_thread_t    g_thread_b;
+static unsigned char     g_stack_a[8192] __attribute__((aligned(16)));
+static unsigned char     g_stack_b[8192] __attribute__((aligned(16)));
+
+static void demo_thread_a(void *arg) {
+    (void)arg;
+    for (;;) {
+        log_writeln("[M9] thread A tick");
+        mcsos_sched_yield(&g_sched);
+    }
+}
+
+static void demo_thread_b(void *arg) {
+    (void)arg;
+    for (;;) {
+        log_writeln("[M9] thread B tick");
+        mcsos_sched_yield(&g_sched);
+    }
+}
 
 static void m3_selftest(void) {
     KERNEL_ASSERT(__kernel_end > __kernel_start);
@@ -25,29 +50,38 @@ static void m4_selftest(void) {
 }
 
 static unsigned char m8_boot_heap[64u * 1024u] __attribute__((aligned(4096)));
-
 static void m8_heap_bootstrap(void) {
     int rc = kmem_init(m8_boot_heap, sizeof(m8_boot_heap));
     if (rc != 0) {
         KERNEL_PANIC("M8 kmem_init failed", (uint64_t)rc);
     }
-
     void *probe = kmem_alloc(128);
     if (probe == (void *)0) {
         KERNEL_PANIC("M8 kmem_alloc probe failed", 0u);
     }
-
     if (kmem_free_checked(probe) != 0) {
         KERNEL_PANIC("M8 kmem_free_checked probe failed", 0u);
     }
-
     kmem_stats_t st;
     kmem_get_stats(&st);
     log_writeln("[M8] kmem heap initialized");
-    log_key_value_hex64("m8_heap_total", (uint64_t)st.total_bytes);
-    log_key_value_hex64("m8_heap_free", (uint64_t)st.free_bytes);
-    log_key_value_hex64("m8_heap_largest_free", (uint64_t)st.largest_free);
-    log_key_value_hex64("m8_heap_blocks", (uint64_t)st.block_count);
+    log_key_value_hex64("m8_heap_total",       (uint64_t)st.total_bytes);
+    log_key_value_hex64("m8_heap_free",        (uint64_t)st.free_bytes);
+    log_key_value_hex64("m8_heap_largest_free",(uint64_t)st.largest_free);
+    log_key_value_hex64("m8_heap_blocks",      (uint64_t)st.block_count);
+}
+
+static void m9_scheduler_init(void) {
+    mcsos_scheduler_init(&g_sched, &g_boot_thread);
+    mcsos_thread_prepare(&g_thread_a, "demo-a", demo_thread_a, (void*)0,
+                         g_stack_a, sizeof(g_stack_a), g_sched.next_id++);
+    mcsos_thread_prepare(&g_thread_b, "demo-b", demo_thread_b, (void*)0,
+                         g_stack_b, sizeof(g_stack_b), g_sched.next_id++);
+    mcsos_sched_enqueue(&g_sched, &g_thread_a);
+    mcsos_sched_enqueue(&g_sched, &g_thread_b);
+    log_writeln("[M9] scheduler initialized");
+    log_writeln("[M9] starting yield loop");
+    mcsos_sched_yield(&g_sched);
 }
 
 void kmain(void) {
@@ -62,45 +96,31 @@ void kmain(void) {
     log_key_value_hex64("kernel_end",   (uint64_t)(uintptr_t)__kernel_end);
     log_key_value_hex64("rflags", cpu_read_rflags());
     m3_selftest();
-
     x86_64_idt_init();
     m4_selftest();
     m8_heap_bootstrap();
-
 #ifdef MCSOS_M3_TRIGGER_PANIC
     KERNEL_PANIC("intentional M3 panic test", 0x4D43534F533033u);
 #else
     log_writeln("[M3] panic path installed; intentional panic disabled");
 #endif
-
 #ifdef MCSOS_M4_TRIGGER_BREAKPOINT
     log_writeln("[M4] triggering int3 breakpoint test");
     x86_64_trigger_breakpoint_for_test();
     log_writeln("[M4] returned from breakpoint handler");
 #endif
-
     log_writeln("[M4] IDT and exception dispatch path installed");
-
-    /* M5: PIC remap, PIT, enable interrupts */
     pic_remap(PIC_MASTER_OFFSET, PIC_SLAVE_OFFSET);
     pic_mask_all();
     pic_unmask_irq(0u);
     log_writeln("[M5] PIC remapped, IRQ0 unmasked");
-
     pit_configure_hz(100u);
     log_writeln("[M5] PIT configured 100Hz");
-
     log_writeln("[M5] enabling interrupts (sti)");
     cpu_sti();
-
     log_writeln("[M3] ready for QEMU smoke test and GDB audit");
-    uint64_t last_reported = 0;
+    m9_scheduler_init();
     for (;;) {
         cpu_hlt();
-        uint64_t now = timer_ticks();
-        if (now - last_reported >= 100u) {
-            log_key_value_hex64("ticks", now);
-            last_reported = now;
-        }
     }
 }
