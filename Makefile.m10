@@ -1,0 +1,33 @@
+HOST_CC ?= clang
+HOST_CFLAGS := -Iinclude -Wall -Wextra -Werror -std=c17 -O2 -g
+FS_CFLAGS := -Ikernel/arch/x86_64/include -Ikernel/include -Iinclude -Wall -Wextra -Werror -std=c17 --target=x86_64-unknown-none-elf -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -O2 -g
+
+build/test_syscall_host: tests/test_syscall_host.c kernel/syscall/syscall.c include/mcsos/syscall.h
+	$(HOST_CC) $(HOST_CFLAGS) tests/test_syscall_host.c kernel/syscall/syscall.c -o $@
+
+build/syscall.o: kernel/syscall/syscall.c include/mcsos/syscall.h
+	$(CC) $(FS_CFLAGS) -c kernel/syscall/syscall.c -o $@
+
+build/syscall_entry.o: kernel/syscall/syscall_entry.S
+	$(CC) --target=x86_64-unknown-none-elf -c kernel/syscall/syscall_entry.S -o $@
+
+build/m10_syscall_combined.o: build/syscall.o build/syscall_entry.o
+	ld -r $^ -o $@
+
+m10-host-test: build/test_syscall_host
+	./build/test_syscall_host
+
+m10-freestanding: build/syscall.o build/syscall_entry.o build/m10_syscall_combined.o
+
+m10-audit: build/m10_syscall_combined.o
+	nm -u build/m10_syscall_combined.o | tee logs/nm_undefined.txt
+	readelf -h build/m10_syscall_combined.o | tee logs/readelf_header.txt
+	objdump -dr build/m10_syscall_combined.o | tee logs/objdump.txt
+	grep -q "Advanced Micro Devices X86-64" logs/readelf_header.txt && echo "[AUDIT OK] Machine x86_64"
+	grep -q "x86_64_syscall_int80_stub" logs/objdump.txt && echo "[AUDIT OK] stub symbol found"
+	grep -q "iretq" logs/objdump.txt && echo "[AUDIT OK] iretq found"
+
+m10-all: m10-host-test m10-freestanding m10-audit
+
+m10-clean:
+	rm -f build/test_syscall_host build/syscall.o build/syscall_entry.o build/m10_syscall_combined.o
