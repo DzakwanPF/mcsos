@@ -9,6 +9,7 @@
 #include <mcsos/kernel/version.h>
 #include <mcsos/kernel/kmem.h>
 #include "mcsos_thread.h"
+#include "mcsos/syscall.h"
 
 extern char __kernel_start[];
 extern char __kernel_end[];
@@ -84,6 +85,43 @@ static void m9_scheduler_init(void) {
     mcsos_sched_yield(&g_sched);
 }
 
+
+/* ---- M10: syscall callbacks ---- */
+static uint64_t k_get_ticks(void) {
+    return timer_ticks();
+}
+static void k_yield_current(void) {
+    mcsos_sched_yield(&g_sched);
+}
+static void k_exit_current(int code) {
+    (void)code;
+    log_writeln("[M10] exit_current stub called");
+}
+static int64_t k_write_serial(const char *buf, size_t len) {
+    (void)len;
+    log_write(buf);
+    return (int64_t)len;
+}
+static void m10_syscall_init(void) {
+    mcsos_syscall_ops_t ops = {
+        .get_ticks     = k_get_ticks,
+        .yield_current = k_yield_current,
+        .exit_current  = k_exit_current,
+        .write_serial  = k_write_serial,
+    };
+    mcsos_syscall_init(&ops);
+    mcsos_syscall_set_user_region((mcsos_user_region_t){
+        .base  = 0x0000000000400000ULL,
+        .limit = 0x0000800000000000ULL,
+    });
+    int64_t r = mcsos_syscall_dispatch(MCSOS_SYS_PING,0,0,0,0,0,0);
+    log_writeln("[M10] syscall dispatcher initialized");
+    log_key_value_hex64("ping_result", (uint64_t)r);
+    int64_t t = mcsos_syscall_dispatch(MCSOS_SYS_GET_TICKS,0,0,0,0,0,0);
+    log_key_value_hex64("ticks", (uint64_t)t);
+    log_writeln("[M10] syscall ping ok");
+}
+
 void kmain(void) {
     log_init();
     log_write(MCSOS_NAME);
@@ -119,6 +157,7 @@ void kmain(void) {
     log_writeln("[M5] enabling interrupts (sti)");
     cpu_sti();
     log_writeln("[M3] ready for QEMU smoke test and GDB audit");
+    m10_syscall_init();
     m9_scheduler_init();
     for (;;) {
         cpu_hlt();
